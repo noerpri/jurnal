@@ -1,0 +1,6 @@
+{
+  "name": "Jurnal Guru dan Absensi",
+  "description": "Aplikasi manajemen jurnal harian mengajar guru, absensi siswa, kelas kustom, dan laporan analitik untuk guru dan kepala sekolah.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -16,9 +16,10 @@ import {
 import { 
   BookOpen, Users, ClipboardCheck, Compass, History, Plus, 
   Trash2, Search, Edit2, LogOut, CheckCircle, Info, FileSpreadsheet, 
-  UserPlus, MapPin, Calendar, Clock, Sparkles, Settings
+  UserPlus, MapPin, Calendar, Clock, Sparkles, Settings, FileText, Printer, HelpCircle
 } from 'lucide-react';
 import Pengaturan from './Pengaturan';
+import { exportJurnalAbsensiToExcel, exportJurnalAbsensiToWord } from '../utils/exporter';
 
 interface DashboardGuruProps {
   user: User;
@@ -113,6 +114,34 @@ export default function DashboardGuru({
       .filter(j => j.teacherId === user.id)
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [journals, user.id]);
+
+  // Printable Report Generation for Teacher
+  const teacherPrintReport = useMemo(() => {
+    const targetClassId = historyClassFilter === 'ALL' ? (teacherClasses[0]?.id || '') : historyClassFilter;
+    const cls = classes.find(c => c.id === targetClassId);
+    if (!cls) return null;
+
+    const matchedJournals = teacherJournals.filter(j => historyClassFilter === 'ALL' ? true : j.kelasId === targetClassId);
+    const matchedRecords = attendanceRecords.filter(r => historyClassFilter === 'ALL' ? r.recordedByTeacherId === user.id : r.kelasId === targetClassId);
+
+    const stats = {
+      hadir: matchedRecords.filter(r => r.status === 'HADIR').length,
+      sakit: matchedRecords.filter(r => r.status === 'SAKIT').length,
+      izin: matchedRecords.filter(r => r.status === 'IZIN').length,
+      alfa: matchedRecords.filter(r => r.status === 'ALFA').length,
+    };
+
+    return {
+      className: cls.name,
+      roomName: cls.room,
+      teacherName: user.name,
+      studentCount: cls.students.length,
+      totalLogs: matchedRecords.length,
+      stats,
+      students: cls.students,
+      journals: matchedJournals,
+    };
+  }, [historyClassFilter, teacherClasses, classes, teacherJournals, attendanceRecords, user.name]);
 
   // 1. Dashboard Metrics Calculations
   const metrics = useMemo(() => {
@@ -470,10 +499,10 @@ export default function DashboardGuru({
   }, [teacherJournals, historySearch, historyClassFilter]);
 
   return (
-    <div className="min-h-screen bg-slate-50/50 flex flex-col md:flex-row font-sans text-slate-800">
+    <div className="min-h-screen bg-slate-50/50 flex flex-col md:flex-row font-sans text-slate-800 print:bg-white print:text-black print:block">
       
       {/* 1. Elegant Left Rail Sidebar Navigation */}
-      <div className="w-full md:w-64 bg-slate-900 text-slate-200 flex flex-col shrink-0 border-r border-slate-800">
+      <div className="w-full md:w-64 bg-slate-900 text-slate-200 flex flex-col shrink-0 border-r border-slate-800 print:hidden">
         <div className="p-6 border-b border-slate-800 bg-slate-950/40">
           <div className="flex items-center gap-2.5">
             {institutionLogo ? (
@@ -554,10 +583,10 @@ export default function DashboardGuru({
       </div>
 
       {/* 2. Primary Workspace Panel */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 print:block">
         
         {/* Header toolbar */}
-        <header className="bg-white border-b border-slate-100 h-16 flex items-center justify-between px-6 sm:px-8 shrink-0">
+        <header className="bg-white border-b border-slate-100 h-16 flex items-center justify-between px-6 sm:px-8 shrink-0 print:hidden">
           <div>
             <h3 className="text-sm font-black text-slate-800">
               {activeTab === 'dashboard' && 'Dashboard Analitis Guru'}
@@ -581,7 +610,135 @@ export default function DashboardGuru({
         </header>
 
         {/* Workspace Body */}
-        <main className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+        <main className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 print:p-0 print:overflow-visible print:block">
+          
+          {/* Printable Report Layout - Visible ONLY on browser print */}
+          {teacherPrintReport && (
+            <div className="hidden print:block space-y-6 text-black bg-white">
+              <div className="text-center pb-4 border-b-2 border-double border-slate-900">
+                <h2 className="text-xl font-bold uppercase tracking-tight">KEMENTERIAN PENDIDIKAN DAN KEBUDAYAAN</h2>
+                <h1 className="text-2xl font-black uppercase text-slate-900">{institutionName}</h1>
+                <p className="text-xs">Ulasan Penilaian Kelas Kustom &amp; Jurnal Mengajar • Tahun Pelajaran {tapel}</p>
+                <p className="text-[10px] font-mono mt-1 font-semibold">Gedung Utama Pembelajaran • Dicetak Mandiri oleh Wali Kelas</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 text-xs border-b border-slate-200 pb-3 gap-2">
+                  <div>
+                    <span><strong>KELAS TARGET:</strong> {teacherPrintReport.className}</span><br />
+                    <span><strong>MATA PELAJARAN:</strong> Umum &amp; Kejuruan</span><br />
+                    <span><strong>RUANG BELAJAR:</strong> {teacherPrintReport.roomName}</span>
+                  </div>
+                  <div className="text-right">
+                    <span><strong>WALI KELAS / GURU:</strong> {teacherPrintReport.teacherName}</span><br />
+                    <span><strong>PERIODE LAPORAN:</strong> Sesi Akademik Berjalan ({tapel})</span><br />
+                    <span><strong>SAMPEL SISWA:</strong> {teacherPrintReport.studentCount} Siswa</span>
+                  </div>
+                </div>
+
+                {/* High level stats block */}
+                <div className="grid grid-cols-4 border border-slate-800 p-2.5 rounded-xs text-xs text-center font-bold">
+                  <div className="border-r border-slate-300">
+                    <span className="text-[9px] text-slate-500 uppercase block">Rasio Kehadiran</span>
+                    <span className="text-sm font-black font-mono">
+                      {teacherPrintReport.stats.hadir + teacherPrintReport.stats.sakit > 0 
+                        ? Math.round((teacherPrintReport.stats.hadir / (teacherPrintReport.totalLogs || 1)) * 100)
+                        : 100}%
+                    </span>
+                  </div>
+                  <div className="border-r border-slate-300">
+                    <span className="text-[9px] text-emerald-600 uppercase block">Siswa Hadir</span>
+                    <span className="text-sm font-mono text-emerald-800">{teacherPrintReport.stats.hadir} Log</span>
+                  </div>
+                  <div className="border-r border-slate-300">
+                    <span className="text-[9px] text-amber-600 uppercase block">Sakit / Izin</span>
+                    <span className="text-sm font-mono text-amber-800">{teacherPrintReport.stats.sakit + teacherPrintReport.stats.izin} Log</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-rose-600 uppercase block">Alasan Alfa</span>
+                    <span className="text-sm font-mono text-rose-800">{teacherPrintReport.stats.alfa} Sesi</span>
+                  </div>
+                </div>
+
+                {/* Printed Student lists */}
+                <div className="space-y-2">
+                  <span className="text-xs font-bold uppercase tracking-wider block">Daftar Rekapitulasi Siswa</span>
+                  <table className="w-full text-left text-[10px] border border-slate-300 border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-300 font-bold">
+                        <th className="p-1 px-2 border-r border-slate-200 w-12">No</th>
+                        <th className="p-1 px-2 border-r border-slate-200">Nama Siswa</th>
+                        <th className="p-1 px-2 border-r border-slate-200">NISN</th>
+                        <th className="p-1 px-2">Kelamin</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teacherPrintReport.students.map((st, sidx) => (
+                        <tr key={st.id} className="border-b border-slate-200">
+                          <td className="p-1 px-2 border-r border-slate-200 font-mono">{sidx + 1}</td>
+                          <td className="p-1 px-2 border-r border-slate-200 font-bold">{st.name}</td>
+                          <td className="p-1 px-2 border-r border-slate-200 font-mono">{st.nisn}</td>
+                          <td className="p-1 px-2">{st.gender === 'L' ? 'Laki-laki' : 'Perempuan'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Printed Journal lines */}
+                <div className="space-y-2 pt-4">
+                  <span className="text-xs font-bold uppercase tracking-wider block">Lembar Rekap Buku Jurnal Mengajar</span>
+                  <table className="w-full text-left text-[9px] border border-slate-300 border-collapse leading-normal">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-300 font-bold">
+                        <th className="p-1.5 px-2 border-r border-slate-200 w-16">Tanggal</th>
+                        <th className="p-1.5 px-2 border-r border-slate-200 w-28">Pendidik / Mapel</th>
+                        <th className="p-1.5 px-2 border-r border-slate-200">Pokok Bahasan / Topik</th>
+                        <th className="p-1.5 px-2 border-r border-slate-200">Alur Aktivitas KBM</th>
+                        <th className="p-1.5 px-2">Hambatan &amp; Tindak Lanjut</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teacherPrintReport.journals.map((j) => (
+                        <tr key={j.id} className="border-b border-slate-200 align-top">
+                          <td className="p-1.5 px-2 border-r border-slate-200 font-mono font-bold whitespace-nowrap">{j.date}</td>
+                          <td className="p-1.5 px-2 border-r border-slate-200">
+                            <span className="font-bold block">{j.teacherName}</span>
+                            <span className="text-slate-500 font-semibold">{j.subject}</span>
+                          </td>
+                          <td className="p-1.5 px-2 border-r border-slate-200 font-bold">{j.topic}</td>
+                          <td className="p-1.5 px-2 border-r border-slate-200 text-slate-700">{j.activities}</td>
+                          <td className="p-1.5 px-2">
+                            {j.obstacles && <div className="text-rose-900"><strong>Kendala:</strong> {j.obstacles}</div>}
+                            {j.followUp && <div className="text-teal-900"><strong>Tindak Lanjut:</strong> {j.followUp}</div>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Stamp of signatures */}
+                <div className="pt-12 grid grid-cols-2 text-xs text-center gap-12 pt-16">
+                  <div>
+                    <span>Mengetahui Wali Kelas</span>
+                    <div className="h-16" />
+                    <span className="font-bold underline block">{teacherPrintReport.teacherName}</span>
+                    <span>NIP. 198004122005011003</span>
+                  </div>
+                  <div>
+                    <span>Kepala Sekolah Hebat,</span>
+                    <div className="h-16" />
+                    <span className="font-bold underline block">Dr. H. Ahmad Dahlan, M.Pd.</span>
+                    <span>NIP. 197405232001121002</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Regular sidebar/screen content wrapped for print omission */}
+          <div className="print:hidden space-y-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -1272,7 +1429,7 @@ export default function DashboardGuru({
               {activeTab === 'riwayat' && (
                 <div className="space-y-4">
                   {/* Search/Header bar */}
-                  <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-xs flex flex-col sm:flex-row gap-3 justify-between items-center">
+                  <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-xs flex flex-col sm:flex-row gap-3 justify-between items-center print:hidden">
                     <div className="w-full sm:w-80 relative">
                       <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
                       <input
@@ -1295,6 +1452,78 @@ export default function DashboardGuru({
                           <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
                       </select>
+                    </div>
+                  </div>
+
+                  {/* Cetak & Ekspor Jurnal Absensi panel card */}
+                  <div className="bg-gradient-to-r from-teal-50/50 to-emerald-50/30 border border-teal-100 rounded-2xl p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 print:hidden">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <FileSpreadsheet className="w-5 h-5 text-teal-700 font-bold" />
+                        <h4 className="text-sm font-extrabold text-slate-800">Ekspor Laporan Cetak Pembelajaran &amp; Presensi</h4>
+                      </div>
+                      <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                        Unduh kelengkapan berkas jurnal mengajar harian dan rekapitulasi data presensi siswa untuk kelas <span className="text-teal-800 font-bold">
+                          {historyClassFilter === 'ALL' ? 'Semua Kelas Pengampu' : (classes.find(c => c.id === historyClassFilter)?.name || 'Kelas')}
+                        </span>.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 w-full md:w-auto shrink-0">
+                      <button
+                        onClick={() => {
+                          const targetClassId = historyClassFilter === 'ALL' ? (teacherClasses[0]?.id || '') : historyClassFilter;
+                          const cls = classes.find(c => c.id === targetClassId);
+                          const matchedJournals = teacherJournals.filter(j => historyClassFilter === 'ALL' ? true : j.kelasId === targetClassId);
+                          const matchedRecords = attendanceRecords.filter(r => historyClassFilter === 'ALL' ? r.recordedByTeacherId === user.id : r.kelasId === targetClassId);
+                          const targetStudents = cls ? cls.students : teacherClasses.flatMap(c => c.students);
+                          
+                          exportJurnalAbsensiToExcel({
+                            className: cls ? cls.name : 'Semua_Kelas',
+                            teacherName: user.name,
+                            tapel,
+                            journals: matchedJournals,
+                            students: targetStudents,
+                            attendanceRecords: matchedRecords,
+                            institutionName,
+                          });
+                        }}
+                        className="bg-white hover:bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors flex-1 md:flex-initial justify-center"
+                      >
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                        Excel (.xls)
+                      </button>
+                      <button
+                        onClick={() => {
+                          const targetClassId = historyClassFilter === 'ALL' ? (teacherClasses[0]?.id || '') : historyClassFilter;
+                          const cls = classes.find(c => c.id === targetClassId);
+                          const matchedJournals = teacherJournals.filter(j => historyClassFilter === 'ALL' ? true : j.kelasId === targetClassId);
+                          const matchedRecords = attendanceRecords.filter(r => historyClassFilter === 'ALL' ? r.recordedByTeacherId === user.id : r.kelasId === targetClassId);
+                          const targetStudents = cls ? cls.students : teacherClasses.flatMap(c => c.students);
+                          
+                          exportJurnalAbsensiToWord({
+                            className: cls ? cls.name : 'Semua_Kelas',
+                            teacherName: user.name,
+                            tapel,
+                            journals: matchedJournals,
+                            students: targetStudents,
+                            attendanceRecords: matchedRecords,
+                            institutionName,
+                          });
+                        }}
+                        className="bg-white hover:bg-blue-50 border border-blue-200 text-blue-800 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors flex-1 md:flex-initial justify-center"
+                      >
+                        <FileText className="w-4 h-4 text-blue-600" />
+                        Word (.doc)
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.print();
+                        }}
+                        className="bg-teal-700 hover:bg-teal-850 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-sm transition-colors flex-1 md:flex-initial justify-center"
+                      >
+                        <Printer className="w-4 h-4" />
+                        Cetak PDF / Laporan
+                      </button>
                     </div>
                   </div>
 
@@ -1415,6 +1644,7 @@ export default function DashboardGuru({
 
             </motion.div>
           </AnimatePresence>
+          </div>
         </main>
       </div>
 

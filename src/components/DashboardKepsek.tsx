@@ -17,9 +17,10 @@ import {
 import { 
   Building, Users, BookOpen, ClipboardCheck, Printer, Search, 
   ChevronRight, LogOut, FileText, CheckCircle2, Star, Calendar, 
-  Filter, Grid, ArrowDownToLine, RefreshCw, Layers, Settings
+  Filter, Grid, ArrowDownToLine, RefreshCw, Layers, Settings, FileSpreadsheet
 } from 'lucide-react';
 import Pengaturan from './Pengaturan';
+import { exportJurnalAbsensiToExcel, exportJurnalAbsensiToWord } from '../utils/exporter';
 
 interface DashboardKepsekProps {
   user: User;
@@ -778,20 +779,63 @@ export default function DashboardKepsek({
                 )}
               </div>
 
-              <footer className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 shrink-0">
-                <button
-                  onClick={() => setShowPrintModal(false)}
-                  className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold px-4 py-2.5 rounded-xl text-xs cursor-pointer"
-                >
-                  Batal
-                </button>
-                <button
-                  onClick={handleTriggerBrowserPrint}
-                  className="bg-teal-700 hover:bg-teal-850 text-white font-bold px-6 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
-                >
-                  <Printer className="w-4 h-4" />
-                  Cetak Dokumen Sekarang
-                </button>
+              <footer className="p-6 border-t border-slate-100 bg-slate-50 flex flex-wrap justify-between items-center gap-3 shrink-0">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (!printPreviewReport) return;
+                      exportJurnalAbsensiToExcel({
+                        className: printPreviewReport.className,
+                        teacherName: printPreviewReport.teacherName,
+                        tapel,
+                        journals: printPreviewReport.journals,
+                        students: printPreviewReport.students,
+                        attendanceRecords: attendanceRecords.filter(r => r.kelasId === printClassId),
+                        institutionName,
+                      });
+                    }}
+                    className="bg-white hover:bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                    disabled={!printPreviewReport}
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    Excel (.xls)
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!printPreviewReport) return;
+                      exportJurnalAbsensiToWord({
+                        className: printPreviewReport.className,
+                        teacherName: printPreviewReport.teacherName,
+                        tapel,
+                        journals: printPreviewReport.journals,
+                        students: printPreviewReport.students,
+                        attendanceRecords: attendanceRecords.filter(r => r.kelasId === printClassId),
+                        institutionName,
+                      });
+                    }}
+                    className="bg-white hover:bg-blue-50 border border-blue-200 text-blue-800 font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                    disabled={!printPreviewReport}
+                  >
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    Word (.doc)
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowPrintModal(false)}
+                    className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-600 font-bold px-4 py-2.5 rounded-xl text-xs cursor-pointer"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleTriggerBrowserPrint}
+                    className="bg-teal-700 hover:bg-teal-850 text-white font-bold px-6 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    disabled={!printPreviewReport}
+                  >
+                    <Printer className="w-4 h-4" />
+                    Cetak PDF / Laporan
+                  </button>
+                </div>
               </footer>
             </motion.div>
           </motion.div>
